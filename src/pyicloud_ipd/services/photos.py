@@ -5,6 +5,7 @@ import json
 import logging
 import base64
 import re
+import random
 
 from datetime import datetime
 from typing import Any, Callable, Dict, Generator, Optional, Sequence, Tuple, TypeVar, Union, cast
@@ -373,10 +374,14 @@ class PhotoAlbum(object):
 
     @property
     def photos(self) -> Generator["PhotoAsset", Any, None]:
+        # Prepare all the different offsets at which we can start retrieving photos
+        offsets = [i for i in range(0, len(self) - 1, min(self.page_size, len(self)))]
+
+        # Pick an offset at random.
+        offset = offsets.pop(random.randint(0, len(offsets) - 1))
+
         if self.direction == "DESCENDING":
-            offset = len(self) - 1
-        else:
-            offset = 0
+            offset -= 1
 
         exception_retries = 0
 
@@ -419,15 +424,13 @@ class PhotoAlbum(object):
 
             master_records_len = len(master_records)
             if master_records_len:
-                if self.direction == "DESCENDING":
-                    offset = offset - master_records_len
-                else:
-                    offset = offset + master_records_len
-
                 for master_record in master_records:
                     record_name = master_record['recordName']
                     yield PhotoAsset(self.service, master_record,
                                      asset_records[record_name])
+
+                # All the photos at this offset has been yielded. Pick the next offset at random.
+                offset = offsets.pop(random.randint(0, len(offsets) - 1))
             else:
                 break
 
