@@ -437,7 +437,8 @@ class PhotoAlbum(object):
                 try:
                     # All the photos at this offset has been yielded. Pick the next offset at random.
                     offset = offsets.pop(random.randint(0, len(offsets) - 1))
-                except IndexError:
+                except (IndexError, ValueError):
+                    # Offsets exhausted! We're done.
                     break
             else:
                 break
