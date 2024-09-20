@@ -377,12 +377,12 @@ class PhotoAlbum(object):
         # Prepare all the different offsets at which we can start retrieving photos
         offsets = [i for i in range(0, len(self) - 1, min(self.page_size, len(self)))]
 
-        if len(offsets) == 1:
-            # Only one photo matches the query filter - offsets do not apply.
-            offset = 0
-        else:
+        try:
             # Pick an offset at random.
             offset = offsets.pop(random.randint(0, len(offsets) - 1))
+        except ValueError:
+            # No offsets available, start at the beginning.
+            offset = 0
 
         exception_retries = 0
 
@@ -437,7 +437,10 @@ class PhotoAlbum(object):
                 try:
                     # All the photos at this offset has been yielded. Pick the next offset at random.
                     offset = offsets.pop(random.randint(0, len(offsets) - 1))
-                except (IndexError, ValueError):
+                except ValueError:
+                    # No offsets available, start at the beginning.
+                    offset = 0
+                except IndexError:
                     # Offsets exhausted! We're done.
                     break
             else:
