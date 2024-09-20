@@ -377,11 +377,12 @@ class PhotoAlbum(object):
         # Prepare all the different offsets at which we can start retrieving photos
         offsets = [i for i in range(0, len(self) - 1, min(self.page_size, len(self)))]
 
-        # Pick an offset at random.
-        offset = offsets.pop(random.randint(0, len(offsets) - 1))
-
-        if self.direction == "DESCENDING":
-            offset -= 1
+        if len(offsets) == 1:
+            # Only one photo matches the query filter - offsets do not apply.
+            offset = 0
+        else:
+            # Pick an offset at random.
+            offset = offsets.pop(random.randint(0, len(offsets) - 1))
 
         exception_retries = 0
 
@@ -424,13 +425,20 @@ class PhotoAlbum(object):
 
             master_records_len = len(master_records)
             if master_records_len:
+                if self.direction == "DESCENDING":
+                    logger.warning(
+                        "Photo frame always traverses photos in ascending direction. Ignoring 'DESCENDING'..."
+                    )
                 for master_record in master_records:
                     record_name = master_record['recordName']
                     yield PhotoAsset(self.service, master_record,
                                      asset_records[record_name])
 
-                # All the photos at this offset has been yielded. Pick the next offset at random.
-                offset = offsets.pop(random.randint(0, len(offsets) - 1))
+                try:
+                    # All the photos at this offset has been yielded. Pick the next offset at random.
+                    offset = offsets.pop(random.randint(0, len(offsets) - 1))
+                except IndexError:
+                    break
             else:
                 break
 
