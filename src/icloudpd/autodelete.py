@@ -7,12 +7,12 @@ import logging
 import os
 from typing import Sequence, Set
 
-from pyicloud_ipd.services.photos import PhotoLibrary
-from pyicloud_ipd.utils import disambiguate_filenames
-from pyicloud_ipd.version_size import AssetVersionSize, VersionSize
 from tzlocal import get_localzone
 
 from icloudpd.paths import local_download_path
+from pyicloud_ipd.services.photos import PhotoLibrary
+from pyicloud_ipd.utils import disambiguate_filenames
+from pyicloud_ipd.version_size import AssetVersionSize, VersionSize
 
 
 def delete_file(logger: logging.Logger, path: str) -> bool:
@@ -73,9 +73,15 @@ def autodelete_photos(
         for _size, _version in disambiguate_filenames(media.versions, _sizes).items():
             if _size in [AssetVersionSize.ALTERNATIVE, AssetVersionSize.ADJUSTED]:
                 paths.add(os.path.normpath(local_download_path(_version.filename, download_dir)))
+                paths.add(
+                    os.path.normpath(local_download_path(_version.filename, download_dir)) + ".xmp"
+                )
         for _size, _version in media.versions.items():
             if _size not in [AssetVersionSize.ALTERNATIVE, AssetVersionSize.ADJUSTED]:
                 paths.add(os.path.normpath(local_download_path(_version.filename, download_dir)))
+                paths.add(
+                    os.path.normpath(local_download_path(_version.filename, download_dir)) + ".xmp"
+                )
         for path in paths:
             if os.path.exists(path):
                 logger.debug("Deleting %s...", path)

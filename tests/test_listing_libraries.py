@@ -1,12 +1,13 @@
 import inspect
 import os
+import shutil
 from unittest import TestCase
 
 import pytest
 from click.testing import CliRunner
-from icloudpd.base import main
 from vcr import VCR
 
+from icloudpd.base import main
 from tests.helpers import path_from_project_root, print_result_exception, recreate_path
 
 vcr = VCR(decode_compressed_response=True, record_mode="none")
@@ -23,9 +24,12 @@ class ListingLibraryTestCase(TestCase):
     def test_listing_library(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
         cookie_dir = os.path.join(base_dir, "cookie")
+        cookie_master_path = os.path.join(self.root_path, "cookie")
 
-        for dir in [base_dir, cookie_dir]:
+        for dir in [base_dir]:
             recreate_path(dir)
+
+        shutil.copytree(cookie_master_path, cookie_dir)
 
         with vcr.use_cassette(os.path.join(self.vcr_path, "listing_albums.yml")):
             # Pass fixed client ID via environment variable
@@ -48,6 +52,7 @@ class ListingLibraryTestCase(TestCase):
             albums = result.output.splitlines()
 
             self.assertIn("PrimarySync", albums)
+            self.assertIn("SharedSync-00000000-1111-2222-3333-444444444444", albums)
             #            self.assertIn("WhatsApp", albums)
 
             assert result.exit_code == 0
@@ -56,9 +61,12 @@ class ListingLibraryTestCase(TestCase):
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
         cookie_dir = os.path.join(base_dir, "cookie")
         data_dir = os.path.join(base_dir, "data")
+        cookie_master_path = os.path.join(self.root_path, "cookie")
 
-        for dir in [base_dir, cookie_dir, data_dir]:
+        for dir in [base_dir, data_dir]:
             recreate_path(dir)
+
+        shutil.copytree(cookie_master_path, cookie_dir)
 
         with vcr.use_cassette(os.path.join(self.vcr_path, "listing_albums.yml")):
             # Pass fixed client ID via environment variable

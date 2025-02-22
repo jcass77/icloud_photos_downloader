@@ -1,11 +1,15 @@
 import inspect
 import os
+import shutil
 from typing import NamedTuple
 from unittest import TestCase
 
-import pyicloud_ipd
 import pytest
 from click.testing import CliRunner
+from vcr import VCR
+
+import pyicloud_ipd
+from foundation.core import constant, identity
 from icloudpd.authentication import TwoStepAuthRequiredError, authenticator
 from icloudpd.base import dummy_password_writter, lp_filename_concatinator, main
 from icloudpd.logger import setup_logger
@@ -14,9 +18,6 @@ from icloudpd.status import StatusExchange
 from pyicloud_ipd.file_match import FileMatchPolicy
 from pyicloud_ipd.raw_policy import RawTreatmentPolicy
 from pyicloud_ipd.sms import parse_trusted_phone_numbers_payload
-from pyicloud_ipd.utils import constant, identity
-from vcr import VCR
-
 from tests.helpers import path_from_project_root, recreate_path
 
 vcr = VCR(decode_compressed_response=True, record_mode="none")
@@ -57,7 +58,40 @@ class AuthenticationTestCase(TestCase):
                     "EC5646DE-9423-11E8-BF21-14109FE0B321",
                 )
 
+        self.assertIn(
+            "ERROR    Failed to login with srp, falling back to old raw password authentication.",
+            self._caplog.text,
+        )
         self.assertTrue("Invalid email/password combination." in str(context.exception))
+
+    def test_fallback_raw_password(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+        cookie_dir = os.path.join(base_dir, "cookie")
+
+        for dir in [base_dir, cookie_dir]:
+            recreate_path(dir)
+
+        with vcr.use_cassette(os.path.join(self.vcr_path, "fallback_raw_password.yml")):  # noqa: SIM117
+            runner = CliRunner(env={"CLIENT_ID": "EC5646DE-9423-11E8-BF21-14109FE0B321"})
+            result = runner.invoke(
+                main,
+                [
+                    "--username",
+                    "jdoe@gmail.com",
+                    "--password",
+                    "password1",
+                    "--no-progress-bar",
+                    "--cookie-directory",
+                    cookie_dir,
+                    "--auth-only",
+                ],
+            )
+            self.assertIn(
+                "ERROR    Failed to login with srp, falling back to old raw password authentication.",
+                self._caplog.text,
+            )
+            self.assertIn("INFO     Authentication completed successfully", self._caplog.text)
+            assert result.exit_code == 0
 
     def test_2sa_required(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
@@ -126,28 +160,11 @@ class AuthenticationTestCase(TestCase):
     def test_successful_token_validation(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
         cookie_dir = os.path.join(base_dir, "cookie")
+        cookie_master_path = os.path.join(self.root_path, "cookie")
 
-        for dir in [base_dir, cookie_dir]:
-            recreate_path(dir)
+        recreate_path(base_dir)
 
-        # We need to create a session file first before we test the auth token validation
-        with vcr.use_cassette(os.path.join(self.vcr_path, "2sa_flow_valid_code.yml")):
-            runner = CliRunner(env={"CLIENT_ID": "DE309E26-942E-11E8-92F5-14109FE0B321"})
-            result = runner.invoke(
-                main,
-                [
-                    "--username",
-                    "jdoe@gmail.com",
-                    "--password",
-                    "password1",
-                    "--no-progress-bar",
-                    "--cookie-directory",
-                    cookie_dir,
-                    "--auth-only",
-                ],
-                input="0\n654321\n",
-            )
-            assert result.exit_code == 0
+        shutil.copytree(cookie_master_path, cookie_dir)
 
         with vcr.use_cassette(os.path.join(self.vcr_path, "successful_auth.yml")):
             runner = CliRunner(env={"CLIENT_ID": "DE309E26-942E-11E8-92F5-14109FE0B321"})
@@ -296,6 +313,37 @@ class AuthenticationTestCase(TestCase):
         html = '<script type="application/json" class="boot_args">{"direct":{"twoSV":{"phoneNumberVerification":{"trustedPhoneNumbers":[{"numberWithDialCode":"+1 (•••) •••-••81","pushMode":"sms","MISSINGobfuscatedNumber":"(•••) •••-••81","lastTwoDigits":"81","id":1}]},"authInitialRoute":"auth/verify/phone"}}}</script>'  # noqa: E501
         result = parse_trusted_phone_numbers_payload(html)
         self.assertEqual(0, len(result), "number of numbers parsed")
+
+    def test_non_2fa(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+        cookie_dir = os.path.join(base_dir, "cookie")
+
+        for dir in [base_dir, cookie_dir]:
+            recreate_path(dir)
+
+        with vcr.use_cassette(os.path.join(self.vcr_path, "auth_non_2fa.yml")) as cass:
+            # To re-record this HTTP request,
+            # delete ./tests/vcr_cassettes/auth_requires_2fa.yml,
+            # put your actual credentials in here, run the test,
+            # and then replace with dummy credentials.
+            authenticator(
+                setup_logger(),
+                "com",
+                identity,
+                lp_filename_concatinator,
+                RawTreatmentPolicy.AS_IS,
+                FileMatchPolicy.NAME_SIZE_DEDUP_WITH_SUFFIX,
+                {"test": (constant("dummy"), dummy_password_writter)},
+                MFAProvider.CONSOLE,
+                StatusExchange(),
+            )(
+                "jdoe@gmail.com",
+                cookie_dir,
+                True,
+                "EC5646DE-9423-11E8-BF21-14109FE0B321",
+            )
+
+            self.assertTrue(cass.all_played)
 
 
 class _TrustedDevice(NamedTuple):

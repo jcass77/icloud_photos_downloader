@@ -30,10 +30,10 @@ jobs:
   lint:
     needs: skip_check
     if: needs.skip_check.outputs.should_skip != 'true'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
-        python-version: [3.8, 3.9, '3.10', 3.11, 3.12]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -51,10 +51,10 @@ jobs:
   type_check: 
     needs: skip_check
     if: needs.skip_check.outputs.should_skip != 'true'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy: 
       matrix: 
-        python-version: [3.8, 3.9, '3.10', 3.11, 3.12]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     steps: 
     - uses: actions/checkout@v4 
     - name: Set up Python ${{ matrix.python-version }} 
@@ -77,10 +77,10 @@ jobs:
   test: 
     needs: [skip_check, patch_version]
     if: needs.skip_check.outputs.should_skip != 'true'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy: 
       matrix: 
-        python-version: [3.8, 3.9, '3.10', 3.11, 3.12]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     steps: 
     - name: Install Locales for Tests
       run: | 
@@ -119,9 +119,8 @@ jobs:
     strategy: 
       fail-fast: false
       matrix: 
-        python-version: [3.12]
+        python-version: [3.13]
         os: 
-          - "macos-12"
           - "macos-13"
           - "macos-14"
           - "windows-2019"

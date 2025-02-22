@@ -3,6 +3,7 @@ import glob
 import inspect
 import logging
 import os
+import shutil
 import sys
 from typing import Any, List, NoReturn, Optional, Sequence, Tuple
 from unittest import TestCase, mock
@@ -11,18 +12,18 @@ from unittest.mock import ANY, PropertyMock, call
 import piexif
 import pytest
 from click.testing import CliRunner
+from piexif._exceptions import InvalidImageDataError
+from requests import Response
+from requests.exceptions import ConnectionError
+from vcr import VCR
+
 from icloudpd import constants
 from icloudpd.base import main
-from piexif._exceptions import InvalidImageDataError
 from pyicloud_ipd.asset_version import AssetVersion
 from pyicloud_ipd.base import PyiCloudService
 from pyicloud_ipd.exceptions import PyiCloudAPIResponseException
 from pyicloud_ipd.services.photos import PhotoAlbum, PhotoAsset, PhotoLibrary
 from pyicloud_ipd.version_size import AssetVersionSize, LivePhotoVersionSize
-from requests import Response
-from requests.exceptions import ConnectionError
-from vcr import VCR
-
 from tests.helpers import (
     path_from_project_root,
     print_result_exception,
@@ -53,7 +54,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos.yml",
             files_to_create,
@@ -149,7 +150,7 @@ class DownloadPhotoTestCase(TestCase):
                 get_exif_patched.return_value = False
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     files_to_create,
@@ -205,7 +206,7 @@ class DownloadPhotoTestCase(TestCase):
 
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 [],
@@ -256,7 +257,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos.yml",
             files_to_create,
@@ -327,7 +328,7 @@ class DownloadPhotoTestCase(TestCase):
                 ut_patched.return_value = None
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     files_to_create,
@@ -399,7 +400,7 @@ class DownloadPhotoTestCase(TestCase):
 
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 [],
@@ -458,7 +459,7 @@ class DownloadPhotoTestCase(TestCase):
                     # Pass fixed client ID via environment variable
                     _, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -513,7 +514,7 @@ class DownloadPhotoTestCase(TestCase):
                     # Pass fixed client ID via environment variable
                     _, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -567,7 +568,7 @@ class DownloadPhotoTestCase(TestCase):
                 with mock.patch.object(PyiCloudService, "authenticate", new=mocked_authenticate):
                     _, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -623,7 +624,7 @@ class DownloadPhotoTestCase(TestCase):
                 with mock.patch.object(PyiCloudService, "authenticate", new=mocked_authenticate):
                     _, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -653,7 +654,7 @@ class DownloadPhotoTestCase(TestCase):
 
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 [],
@@ -729,7 +730,7 @@ class DownloadPhotoTestCase(TestCase):
 
                     data_dir, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -787,7 +788,7 @@ class DownloadPhotoTestCase(TestCase):
 
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -825,6 +826,70 @@ class DownloadPhotoTestCase(TestCase):
 
                 assert result.exit_code == 0
 
+    def test_download_two_sizes_with_force_size(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+        with mock.patch("icloudpd.download.download_media") as dp_patched:
+            dp_patched.return_value = True
+
+            with mock.patch("icloudpd.download.os.utime") as ut_patched:
+                ut_patched.return_value = None
+
+                with mock.patch.object(PhotoAsset, "versions", new_callable=PropertyMock) as pa:
+                    pa.return_value = {
+                        AssetVersionSize.ORIGINAL: AssetVersion("IMG_7409.JPG", 1, "http", "jpeg"),
+                        AssetVersionSize.THUMB: AssetVersion("IMG_7409.JPG", 1, "http", "jpeg"),
+                    }
+
+                    data_dir, result = run_icloudpd_test(
+                        self.assertEqual,
+                        self.root_path,
+                        base_dir,
+                        "listing_photos.yml",
+                        [],
+                        [],
+                        [
+                            "--username",
+                            "jdoe@gmail.com",
+                            "--password",
+                            "password1",
+                            "--recent",
+                            "1",
+                            "--size",
+                            "medium",
+                            "--size",
+                            "thumb",
+                            "--force-size",
+                            "--no-progress-bar",
+                            "--threads-num",
+                            "1",
+                        ],
+                    )
+
+                    self.assertIn(
+                        "DEBUG    Looking up all photos and videos from album All Photos...",
+                        self._caplog.text,
+                    )
+                    self.assertIn(
+                        f"INFO     Downloading the first medium,thumb photo or video to {data_dir} ...",
+                        self._caplog.text,
+                    )
+                    self.assertIn(
+                        "ERROR    medium size does not exist for IMG_7409.JPG. Skipping...",
+                        self._caplog.text,
+                    )
+                    self.assertIn("INFO     All photos have been downloaded", self._caplog.text)
+                    dp_patched.assert_called_once_with(
+                        ANY,
+                        False,
+                        ANY,
+                        ANY,
+                        f"{os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}",
+                        ANY,
+                        AssetVersionSize.THUMB,
+                    )
+
+                    assert result.exit_code == 0
+
     def test_invalid_creation_date(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
 
@@ -841,7 +906,7 @@ class DownloadPhotoTestCase(TestCase):
 
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 [],
@@ -897,7 +962,7 @@ class DownloadPhotoTestCase(TestCase):
 
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 [],
@@ -935,53 +1000,61 @@ class DownloadPhotoTestCase(TestCase):
             self.assertIn("INFO     All photos have been downloaded", self._caplog.text)
             assert result.exit_code == 0
 
-    def test_unknown_item_type(self) -> None:
+    def test_missing_item_type(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
 
-        with mock.patch("icloudpd.download.download_media") as dp_patched:
-            dp_patched.return_value = True
+        files_to_download = [
+            ("2018/07/31", "IMG_7409.JPG"),
+        ]
 
-            with mock.patch.object(
-                PhotoAsset, "item_type", new_callable=mock.PropertyMock
-            ) as it_mock:
-                it_mock.return_value = "unknown"
+        _, result = run_icloudpd_test(
+            self.assertEqual,
+            self.root_path,
+            base_dir,
+            "listing_photos_missing_item_type.yml",
+            [],
+            files_to_download,
+            [
+                "--username",
+                "jdoe@gmail.com",
+                "--password",
+                "password1",
+                "--recent",
+                "1",
+                "--no-progress-bar",
+                "--skip-live-photos",
+            ],
+        )
 
-                data_dir, result = run_icloudpd_test(
-                    self.assertEqual,
-                    self.vcr_path,
-                    base_dir,
-                    "listing_photos.yml",
-                    [],
-                    [],
-                    [
-                        "--username",
-                        "jdoe@gmail.com",
-                        "--password",
-                        "password1",
-                        "--recent",
-                        "1",
-                        "--no-progress-bar",
-                        "--threads-num",
-                        "1",
-                    ],
-                )
+        assert result.exit_code == 0
 
-                self.assertIn(
-                    "DEBUG    Looking up all photos and videos from album All Photos...",
-                    self._caplog.text,
-                )
-                self.assertIn(
-                    f"INFO     Downloading the first original photo or video to {data_dir} ...",
-                    self._caplog.text,
-                )
-                self.assertIn(
-                    "DEBUG    Skipping IMG_7409.JPG, only downloading photos and videos. (Item type was: unknown)",
-                    self._caplog.text,
-                )
-                self.assertIn("INFO     All photos have been downloaded", self._caplog.text)
-                dp_patched.assert_not_called()
+    def test_missing_item_type_value(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
 
-                assert result.exit_code == 0
+        files_to_download = [
+            ("2018/07/31", "IMG_7409.JPG"),
+        ]
+
+        _, result = run_icloudpd_test(
+            self.assertEqual,
+            self.root_path,
+            base_dir,
+            "listing_photos_missing_item_type_value.yml",
+            [],
+            files_to_download,
+            [
+                "--username",
+                "jdoe@gmail.com",
+                "--password",
+                "password1",
+                "--recent",
+                "1",
+                "--no-progress-bar",
+                "--skip-live-photos",
+            ],
+        )
+
+        assert result.exit_code == 0
 
     def test_download_and_dedupe_existing_photos(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
@@ -1013,7 +1086,7 @@ class DownloadPhotoTestCase(TestCase):
         with mock.patch.object(PhotoAsset, "download", new=mocked_download):
             data_dir, result = run_icloudpd_test(
                 self.assertEqual,
-                self.vcr_path,
+                self.root_path,
                 base_dir,
                 "listing_photos.yml",
                 files_to_create,
@@ -1094,7 +1167,7 @@ class DownloadPhotoTestCase(TestCase):
                 get_exif_patched.return_value = False
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -1146,7 +1219,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos.yml",
             [],
@@ -1210,7 +1283,7 @@ class DownloadPhotoTestCase(TestCase):
                 get_exif_patched.return_value = False
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -1265,7 +1338,7 @@ class DownloadPhotoTestCase(TestCase):
                 get_exif_patched.return_value = False
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos_chinese.yml",
                     [],
@@ -1299,7 +1372,7 @@ class DownloadPhotoTestCase(TestCase):
                 self.assertIn("INFO     All photos have been downloaded", self._caplog.text)
                 assert result.exit_code == 0
 
-    def test_download_after_delete(self) -> None:
+    def test_download_and_delete_after(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
 
         files_to_download = [("2018/07/31", "IMG_7409.JPG")]
@@ -1310,7 +1383,7 @@ class DownloadPhotoTestCase(TestCase):
                 get_exif_patched.return_value = False
                 data_dir, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -1343,12 +1416,56 @@ class DownloadPhotoTestCase(TestCase):
                 # TODO assert cass.all_played
                 assert result.exit_code == 0
 
-    def test_download_after_delete_fail(self) -> None:
+    def test_download_and_not_delete_after_when_exists(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+
+        files_to_create = [("2018/07/31", "IMG_7409.JPG", 1884695)]
+
+        with mock.patch.object(piexif, "insert") as piexif_patched:
+            piexif_patched.side_effect = InvalidImageDataError
+            with mock.patch("icloudpd.exif_datetime.get_photo_exif") as get_exif_patched:
+                get_exif_patched.return_value = False
+                data_dir, result = run_icloudpd_test(
+                    self.assertEqual,
+                    self.root_path,
+                    base_dir,
+                    "listing_photos.yml",
+                    files_to_create,
+                    [],
+                    [
+                        "--username",
+                        "jdoe@gmail.com",
+                        "--password",
+                        "password1",
+                        "--recent",
+                        "1",
+                        "--skip-videos",
+                        "--skip-live-photos",
+                        "--no-progress-bar",
+                        "--threads-num",
+                        "1",
+                        "--delete-after-download",
+                    ],
+                )
+
+                self.assertIn(
+                    "DEBUG    Looking up all photos from album All Photos...", self._caplog.text
+                )
+                self.assertIn(
+                    f"INFO     Downloading the first original photo to {data_dir} ...",
+                    self._caplog.text,
+                )
+                self.assertNotIn("INFO     Deleted IMG_7409.JPG in iCloud", self._caplog.text)
+                self.assertIn("INFO     All photos have been downloaded", self._caplog.text)
+                # TODO assert cass.all_played
+                assert result.exit_code == 0
+
+    def test_download_and_delete_after_fail(self) -> None:
         base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_no_delete.yml",
             [],
@@ -1391,7 +1508,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos.yml",
             files_to_create,
@@ -1457,7 +1574,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_bad_filename.yml",
             files_to_create,
@@ -1565,7 +1682,7 @@ class DownloadPhotoTestCase(TestCase):
                 # Pass fixed client ID via environment variable
                 _, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -1613,7 +1730,7 @@ class DownloadPhotoTestCase(TestCase):
 
                 _, result = run_icloudpd_test(
                     self.assertEqual,
-                    self.vcr_path,
+                    self.root_path,
                     base_dir,
                     "listing_photos.yml",
                     [],
@@ -1656,9 +1773,12 @@ class DownloadPhotoTestCase(TestCase):
         # TODO remove code dup
         cookie_dir = os.path.join(base_dir, "cookie")
         data_dir = os.path.join(base_dir, "data")
+        cookie_master_path = os.path.join(self.root_path, "cookie")
 
-        for dir in [base_dir, cookie_dir, data_dir]:
+        for dir in [base_dir, data_dir]:
             recreate_path(dir)  # this needs to happen before mock
+
+        shutil.copytree(cookie_master_path, cookie_dir)
 
         with vcr.use_cassette(os.path.join(self.vcr_path, "listing_photos.yml")):  # noqa: SIM117
             with mock.patch("os.makedirs", create=True) as m:
@@ -1710,7 +1830,7 @@ class DownloadPhotoTestCase(TestCase):
 
         _, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos.yml",
             [],
@@ -1766,7 +1886,7 @@ class DownloadPhotoTestCase(TestCase):
 
                     data_dir, result = run_icloudpd_test(
                         self.assertEqual,
-                        self.vcr_path,
+                        self.root_path,
                         base_dir,
                         "listing_photos.yml",
                         [],
@@ -1812,7 +1932,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_raw.yml",
             [],
@@ -1851,7 +1971,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_two_sizes.yml",
             [],
@@ -1901,7 +2021,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_raw_alt.yml",
             [],
@@ -1949,7 +2069,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_raw_alt_adj.yml",
             [],
@@ -1999,7 +2119,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_raw_alt.yml",
             [],
@@ -2049,7 +2169,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_raw_alt.yml",
             [],
@@ -2103,7 +2223,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_bad_filename_base64_encoding.yml",
             files_to_create,
@@ -2143,7 +2263,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_bad_filename_utf8_encoding.yml",
             files_to_create,
@@ -2181,7 +2301,7 @@ class DownloadPhotoTestCase(TestCase):
 
         data_dir, result = run_icloudpd_test(
             self.assertEqual,
-            self.vcr_path,
+            self.root_path,
             base_dir,
             "listing_photos_filename_string_encoding.yml",
             files_to_create,
@@ -2203,3 +2323,36 @@ class DownloadPhotoTestCase(TestCase):
         print_result_exception(result)
 
         self.assertEqual(result.exit_code, 0)
+
+    def test_download_from_shared_library(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+
+        data_dir, result = run_icloudpd_test(
+            self.assertEqual,
+            self.root_path,
+            base_dir,
+            "listing_photos.yml",
+            [],
+            [],
+            [
+                "--username",
+                "jdoe@gmail.com",
+                "--password",
+                "password1",
+                "--library",
+                "SharedSync-00000000-1111-2222-3333-444444444444",
+                "--dry-run",
+                "--no-progress-bar",
+            ],
+        )
+        
+        self.assertEqual(result.exit_code, 0)
+
+        self.assertIn(
+            "DEBUG    Looking up all photos and videos from album All Photos...", self._caplog.text
+        )
+        self.assertIn(
+            f"INFO     Downloading the first original photo or video to {data_dir} ...",
+            self._caplog.text,
+        )
+        self.assertIn("INFO     All photos have been downloaded", self._caplog.text)

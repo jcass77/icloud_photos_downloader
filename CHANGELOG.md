@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+- feature: list and download from shared libraries for invitee [#947](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/947)
+
+## 1.26.1 (2025-01-23)
+
+- fix: XMP metadata with plist in XML format causes crash [#1059](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1059)
+- fix: missing 'isFavorite' in XMP metadata causes crash [#1058](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1058)
+- fix: crash when downloading files with `--xmp-sidecar` caused by files having non-JSON adjustment data. [#1056](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1056)
+
+## 1.26.0 (2025-01-13)
+
+- feature: add `--keep-icloud-recent-days` parameter to keep photos newer than this many days in iCloud. Deletes the rest. [#1046](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1046)
+
+## 1.25.1 (2024-12-28)
+
+- chore: bump max/default python version 3.12->3.13
+- chore: bump min python version 3.8->3.9
+- fix: fallback to old raw password auth if srp auth fails [#975](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/975)
+
+## 1.25.0 (2024-12-03)
+
+- fix: failed to authenticate for accounts with srp s2k_fo auth protocol [#975](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/975)
+- fix: failed to login non-2FA account for the first attempt [#1012](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1012)
+- fix: log more information for authentication error [#1010](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1010)
+- feature: add support for XMP files with `--xmp-sidecar` parameter [#448](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/448), [#102](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/102), [#789](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/789)
+
+## 1.24.4 (2024-11-18)
+
+- fix: deprecate macos-12 [#1000](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1000)
+- fix: sms MFA dropping leading zeros [#993](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/993)
+
+## 1.24.3 (2024-11-03)
+
+- fix: crashes when no imagetype sent by Apple [ref](https://github.com/boredazfcuk/docker-icloudpd/issues/680)
+
+## 1.24.2 (2024-11-02)
+
+- fix: errors for accounts with salt started with zero byte [#975](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/975)
+
+## 1.24.1 (2024-10-28)
+
+- fix: accounts without 2fa are supported [#959](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/959)
+
+## 1.24.0 (2024-10-25)
+
+- fix: new AppleID auth with srp [#970](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/970)
+- feature: when ran without parameters, `icloudpd` shows help [#963](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/963)
+- fix: force_size should not skip subsequent sizes [#955](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/955)
+
 ## 1.23.4 (2024-09-02)
 
 - fix: support plain text encoding for filename in addition to base64 [ref](https://github.com/boredazfcuk/docker-icloudpd/issues/641)

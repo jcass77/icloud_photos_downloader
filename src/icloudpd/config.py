@@ -1,10 +1,9 @@
 from typing import Callable, Dict, Optional, Sequence, Tuple
 
+from icloudpd.mfa_provider import MFAProvider
 from pyicloud_ipd.file_match import FileMatchPolicy
 from pyicloud_ipd.raw_policy import RawTreatmentPolicy
 from pyicloud_ipd.version_size import AssetVersionSize, LivePhotoVersionSize
-
-from icloudpd.mfa_provider import MFAProvider
 
 
 class Config:
@@ -14,7 +13,7 @@ class Config:
         username: str,
         auth_only: bool,
         cookie_directory: str,
-        size: Sequence[AssetVersionSize],
+        primary_sizes: Sequence[AssetVersionSize],
         live_photo_size: LivePhotoVersionSize,
         recent: Optional[int],
         until_found: Optional[int],
@@ -24,6 +23,7 @@ class Config:
         list_libraries: bool,
         skip_videos: bool,
         skip_live_photos: bool,
+        xmp_sidecar: bool,
         force_size: bool,
         auto_delete: bool,
         only_print_filenames: bool,
@@ -40,6 +40,7 @@ class Config:
         notification_script: Optional[str],
         threads_num: int,
         delete_after_download: bool,
+        keep_icloud_recent_days: Optional[int],
         domain: str,
         watch_with_interval: Optional[int],
         dry_run: bool,
@@ -55,7 +56,7 @@ class Config:
         self.username = username
         self.auth_only = auth_only
         self.cookie_directory = cookie_directory
-        self.size = " ".join(str(e) for e in size)
+        self.size = " ".join(str(e) for e in primary_sizes)
         self.live_photo_size = live_photo_size
         self.recent = recent
         self.until_found = until_found
@@ -81,6 +82,7 @@ class Config:
         self.notification_script = notification_script
         self.threads_num = threads_num
         self.delete_after_download = delete_after_download
+        self.keep_icloud_recent_days = keep_icloud_recent_days
         self.domain = domain
         self.watch_with_interval = watch_with_interval
         self.dry_run = dry_run

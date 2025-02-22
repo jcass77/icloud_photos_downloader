@@ -4,8 +4,9 @@
 from multiprocessing import freeze_support
 
 import foundation
-
-from icloudpd.mfa_provider import MFAProvider  # fmt: skip
+from foundation.core import compose, constant, identity
+from icloudpd.mfa_provider import MFAProvider
+from pyicloud_ipd.item_type import AssetItemType  # fmt: skip
 
 freeze_support()  # fmt: skip # fixing tqdm on macos
 
@@ -35,20 +36,6 @@ from typing import (
 )
 
 import click
-from pyicloud_ipd.base import PyiCloudService
-from pyicloud_ipd.exceptions import PyiCloudAPIResponseException
-from pyicloud_ipd.file_match import FileMatchPolicy
-from pyicloud_ipd.raw_policy import RawTreatmentPolicy
-from pyicloud_ipd.services.photos import PhotoAsset, PhotoLibrary, PhotosService
-from pyicloud_ipd.utils import (
-    compose,
-    constant,
-    disambiguate_filenames,
-    get_password_from_keyring,
-    identity,
-    store_password_in_keyring,
-)
-from pyicloud_ipd.version_size import AssetVersionSize, LivePhotoVersionSize
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 from tzlocal import get_localzone
@@ -63,6 +50,20 @@ from icloudpd.paths import clean_filename, local_download_path, remove_unicode_c
 from icloudpd.server import serve_app
 from icloudpd.status import Status, StatusExchange
 from icloudpd.string_helpers import truncate_middle
+from icloudpd.xmp_sidecar import generate_xmp_file
+from pyicloud_ipd.base import PyiCloudService
+from pyicloud_ipd.exceptions import PyiCloudAPIResponseException
+from pyicloud_ipd.file_match import FileMatchPolicy
+from pyicloud_ipd.raw_policy import RawTreatmentPolicy
+from pyicloud_ipd.services.photos import PhotoAsset, PhotoLibrary, PhotosService
+from pyicloud_ipd.utils import (
+    add_suffix_to_filename,
+    disambiguate_filenames,
+    get_password_from_keyring,
+    size_to_suffix,
+    store_password_in_keyring,
+)
+from pyicloud_ipd.version_size import AssetVersionSize, LivePhotoVersionSize
 
 
 def build_filename_cleaner(
@@ -281,8 +282,7 @@ def report_version(ctx: click.Context, _param: click.Parameter, value: bool) -> 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
-@click.command(context_settings=CONTEXT_SETTINGS, options_metavar="<options>")
-# @click.argument(
+@click.command(context_settings=CONTEXT_SETTINGS, options_metavar="<options>", no_args_is_help=True)
 @click.option(
     "-d",
     "--directory",
@@ -375,6 +375,11 @@ CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 @click.option(
     "--skip-live-photos",
     help="Don't download any live photos (default: Download live photos)",
+    is_flag=True,
+)
+@click.option(
+    "--xmp-sidecar",
+    help="Export additional data as XMP sidecar files (default: don't export)",
     is_flag=True,
 )
 @click.option(
@@ -483,6 +488,13 @@ CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
     is_flag=True,
 )
 @click.option(
+    "--keep-icloud-recent-days",
+    help="Keep photos newer than this many days in iCloud. Deletes the rest. "
+    + "If set to 0, all photos will be deleted from iCloud.",
+    type=click.IntRange(0),
+    default=None,
+)
+@click.option(
     "--domain",
     help="What iCloud root domain to use. Use 'cn' for mainland China (default: 'com')",
     type=click.Choice(["com", "cn"]),
@@ -583,6 +595,7 @@ def main(
     list_libraries: bool,
     skip_videos: bool,
     skip_live_photos: bool,
+    xmp_sidecar: bool,
     force_size: bool,
     auto_delete: bool,
     only_print_filenames: bool,
@@ -600,6 +613,7 @@ def main(
     notification_script: Optional[str],
     threads_num: int,
     delete_after_download: bool,
+    keep_icloud_recent_days: Optional[int],
     domain: str,
     watch_with_interval: Optional[int],
     dry_run: bool,
@@ -644,6 +658,12 @@ def main(
             print("--auto-delete and --delete-after-download are mutually exclusive")
             sys.exit(2)
 
+        if keep_icloud_recent_days and delete_after_download:
+            print(
+                "--keep-icloud-recent-days and --delete-after-download should not be used together."
+            )
+            sys.exit(2)
+
         if watch_with_interval and (list_albums or only_print_filenames):  # pragma: no cover
             print(
                 "--watch_with_interval is not compatible with --list_albums, --only_print_filenames"
@@ -684,7 +704,7 @@ def main(
             username=username,
             auth_only=auth_only,
             cookie_directory=cookie_directory,
-            size=size,
+            primary_sizes=size,
             live_photo_size=live_photo_size,
             recent=recent,
             until_found=until_found,
@@ -694,6 +714,7 @@ def main(
             list_libraries=list_libraries,
             skip_videos=skip_videos,
             skip_live_photos=skip_live_photos,
+            xmp_sidecar=xmp_sidecar,
             force_size=force_size,
             auto_delete=auto_delete,
             only_print_filenames=only_print_filenames,
@@ -710,6 +731,7 @@ def main(
             notification_script=notification_script,
             threads_num=threads_num,
             delete_after_download=delete_after_download,
+            keep_icloud_recent_days=keep_icloud_recent_days,
             domain=domain,
             watch_with_interval=watch_with_interval,
             dry_run=dry_run,
@@ -756,6 +778,7 @@ def main(
                 live_photo_size,
                 dry_run,
                 file_match_policy,
+                xmp_sidecar,
             )
             if directory is not None
             else (lambda _s: lambda _c, _p: False),
@@ -784,6 +807,7 @@ def main(
             no_progress_bar,
             notification_script,
             delete_after_download,
+            keep_icloud_recent_days,
             domain,
             logger,
             watch_with_interval,
@@ -804,7 +828,7 @@ def download_builder(
     skip_videos: bool,
     folder_structure: str,
     directory: str,
-    size: Sequence[AssetVersionSize],
+    primary_sizes: Sequence[AssetVersionSize],
     force_size: bool,
     only_print_filenames: bool,
     set_exif_datetime: bool,
@@ -812,6 +836,7 @@ def download_builder(
     live_photo_size: LivePhotoVersionSize,
     dry_run: bool,
     file_match_policy: FileMatchPolicy,
+    xmp_sidecar: bool,
 ) -> Callable[[PyiCloudService], Callable[[Counter, PhotoAsset], bool]]:
     """factory for downloader"""
 
@@ -819,20 +844,21 @@ def download_builder(
         def download_photo_(counter: Counter, photo: PhotoAsset) -> bool:
             """internal function for actually downloading the photos"""
 
-            if skip_videos and photo.item_type != "image":
+            if skip_videos and photo.item_type == AssetItemType.MOVIE:
                 logger.debug(
                     "Skipping %s, only downloading photos." + "(Item type was: %s)",
                     photo.filename,
                     photo.item_type,
                 )
                 return False
-            if photo.item_type not in ("image", "movie"):
-                logger.debug(
-                    "Skipping %s, only downloading photos and videos. " + "(Item type was: %s)",
-                    photo.filename,
-                    photo.item_type,
-                )
-                return False
+            # Throwing error now
+            # if not photo.item_type:
+            #     logger.debug(
+            #         "Skipping %s, only downloading photos and videos. " + "(Item type was: %s)",
+            #         photo.filename,
+            #         photo.item_type,
+            #     )
+            #     return False
             try:
                 created_date = photo.created.astimezone(get_localzone())
             except (ValueError, OSError):
@@ -856,7 +882,7 @@ def download_builder(
                     date_path = folder_structure.format(created_date)
 
             try:
-                versions = disambiguate_filenames(photo.versions, size)
+                versions = disambiguate_filenames(photo.versions, primary_sizes)
             except KeyError as ex:
                 print(f"KeyError: {ex} attribute was not found in the photo fields.")
                 with open(file="icloudpd-photo-error.json", mode="w", encoding="utf8") as outfile:
@@ -885,7 +911,7 @@ def download_builder(
             download_dir = os.path.normpath(os.path.join(directory, date_path))
             success = False
 
-            for download_size in size:
+            for download_size in primary_sizes:
                 if download_size not in versions and download_size != AssetVersionSize.ORIGINAL:
                     if force_size:
                         logger.error(
@@ -893,8 +919,8 @@ def download_builder(
                             download_size.value,
                             photo.filename,
                         )
-                        return False
-                    if AssetVersionSize.ORIGINAL in size:
+                        continue
+                    if AssetVersionSize.ORIGINAL in primary_sizes:
                         continue  # that should avoid double download for original
                     download_size = AssetVersionSize.ORIGINAL
 
@@ -909,7 +935,7 @@ def download_builder(
                     # Deprecation - We used to download files like IMG_1234-original.jpg,
                     # so we need to check for these.
                     # Now we match the behavior of iCloud for Windows: IMG_1234.jpg
-                    original_download_path = ("-original.").join(download_path.rsplit(".", 1))
+                    original_download_path = add_suffix_to_filename("-original", download_path)
                     file_exists = os.path.isfile(original_download_path)
 
                 if file_exists:
@@ -959,17 +985,23 @@ def download_builder(
                                 download.set_utime(download_path, created_date)
                             logger.info("Downloaded %s", truncated_path)
 
+                if xmp_sidecar:
+                    generate_xmp_file(logger, download_path, photo._asset_record, dry_run)
+
             # Also download the live photo if present
             if not skip_live_photos:
                 lp_size = live_photo_size
                 if lp_size in photo.versions:
                     version = photo.versions[lp_size]
                     lp_filename = version.filename
-                    # if live_photo_size != "original":
-                    #     # Add size to filename if not original
-                    #     lp_filename = lp_filename.replace(
-                    #         ".MOV", f"-{live_photo_size}.MOV"
-                    #     )
+                    if live_photo_size != LivePhotoVersionSize.ORIGINAL:
+                        # Add size to filename if not original
+                        lp_filename = add_suffix_to_filename(
+                            size_to_suffix(live_photo_size),
+                            lp_filename,
+                        )
+                    else:
+                        pass
                     lp_download_path = os.path.join(download_dir, lp_filename)
 
                     lp_file_exists = os.path.isfile(lp_download_path)
@@ -1019,7 +1051,7 @@ def delete_photo(
     clean_filename_local = photo.filename
     logger.debug("Deleting %s in iCloud...", clean_filename_local)
     url = (
-        f"{photo_service._service_endpoint}/records/modify?"
+        f"{library_object.service_endpoint}/records/modify?"
         f"{urllib.parse.urlencode(photo_service.params)}"
     )
     post_data = json.dumps(
@@ -1133,7 +1165,7 @@ def core(
     username: str,
     auth_only: bool,
     cookie_directory: str,
-    size: Sequence[AssetVersionSize],
+    primary_sizes: Sequence[AssetVersionSize],
     recent: Optional[int],
     until_found: Optional[int],
     album: str,
@@ -1154,6 +1186,7 @@ def core(
     no_progress_bar: bool,
     notification_script: Optional[str],
     delete_after_download: bool,
+    keep_icloud_recent_days: Optional[int],
     domain: str,
     logger: logging.Logger,
     watch_interval: Optional[int],
@@ -1218,8 +1251,9 @@ def core(
     library_object: PhotoLibrary = icloud.photos
 
     if list_libraries:
-        libraries_dict = icloud.photos.libraries
-        library_names = libraries_dict.keys()
+        library_names = (
+            icloud.photos.private_libraries.keys() | icloud.photos.shared_libraries.keys()
+        )
         print(*library_names, sep="\n")
 
     else:
@@ -1230,9 +1264,11 @@ def core(
             # case exit.
             try:
                 if library:
-                    try:
-                        library_object = icloud.photos.libraries[library]
-                    except KeyError:
+                    if library in icloud.photos.private_libraries:
+                        library_object = icloud.photos.private_libraries[library]
+                    elif library in icloud.photos.shared_libraries:
+                        library_object = icloud.photos.shared_libraries[library]
+                    else:
                         logger.error("Unknown library: %s", library)
                         return 1
                 photos = library_object.albums[album]
@@ -1310,7 +1346,7 @@ def core(
             logger.info(
                 ("Downloading %s %s" + " photo%s%s to %s ..."),
                 photos_count_str,
-                ",".join([_s.value for _s in size]),
+                ",".join([_s.value for _s in primary_sizes]),
                 plural_suffix,
                 video_suffix,
                 directory,
@@ -1327,6 +1363,7 @@ def core(
             )
             photos_counter = 0
 
+            now = datetime.datetime.now(get_localzone())
             photos_iterator = iter(photos_enumerator)
             while True:
                 try:
@@ -1337,7 +1374,27 @@ def core(
                         )
                         break
                     item = next(photos_iterator)
+                    should_delete = False
+
                     if download_photo(consecutive_files_found, item) and delete_after_download:
+                        should_delete = True
+
+                    if keep_icloud_recent_days is not None:
+                        created_date = item.created.astimezone(get_localzone())
+                        age_days = (now - created_date).days
+                        logger.debug(f"Created date: {created_date}")
+                        logger.debug(f"Keep iCloud recent days: {keep_icloud_recent_days}")
+                        logger.debug(f"Age days: {age_days}")
+                        if age_days < keep_icloud_recent_days:
+                            logger.debug(
+                                "Skipping deletion of %s as it is within the keep_icloud_recent_days period (%d days old)",
+                                item.filename,
+                                age_days,
+                            )
+                        else:
+                            should_delete = True
+
+                    if should_delete:
                         delete_local = partial(
                             delete_photo_dry_run if dry_run else delete_photo,
                             logger,
@@ -1372,7 +1429,7 @@ def core(
 
             if auto_delete:
                 autodelete_photos(
-                    logger, dry_run, library_object, folder_structure, directory, size
+                    logger, dry_run, library_object, folder_structure, directory, primary_sizes
                 )
 
             if watch_interval:  # pragma: no cover

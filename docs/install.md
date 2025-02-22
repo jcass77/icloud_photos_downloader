@@ -1,7 +1,12 @@
 # Install and Run
 
 There are three ways to run `icloudpd`:
-1. Download executable for your platform from the GitHub [Release](https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases/tag/v1.23.4) and run it
+1. Download executable for your platform from the GitHub [Release](https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases/tag/v1.26.1) and run it, e.g.:
+
+    ```sh
+    icloudpd --username your@email.address --directory photos --watch-with-interval 3600
+    ```
+
 1. Use package manager to install, update, and, in some cases, run ([Docker](#docker), [PyPI](#pypi), [AUR](#aur), [npm](#npm))
 1. Build and run from the source
 
@@ -12,7 +17,7 @@ There are three ways to run `icloudpd`:
 docker run -it --rm --name icloudpd -v $(pwd)/Photos:/data -e TZ=America/Los_Angeles icloudpd/icloudpd:latest icloudpd --directory /data --username my@email.address --watch-with-interval 3600
 ```
 
-Image asset date will be converted to specified TZ and then used for creating folders ([see `--folder-structure` parameter](#folder_structure))
+Image asset date will be converted to specified TZ and then used for creating folders (see [`--folder-structure`](folder-structure-parameter) parameter)
 
 Synchronization logic can be adjusted with command-line parameters. Run the following to get full list:
 ``` sh 
@@ -102,13 +107,13 @@ npx --yes icloudpd --directory /data --username my@email.address --watch-with-in
 
 Here are the steps to make it working:
 - download binary from GitHub [Releases](https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases) into desired local folder
-- add executable flag by running `chmod +x icloudpd-1.23.4-macos-amd64`
-- start it from the terminal: `icloudpd-1.23.4-macos-amd64`
+- add executable flag by running `chmod +x icloudpd-1.26.1-macos-amd64`
+- start it from the terminal: `icloudpd-1.26.1-macos-amd64`
 - Apple will tell you that it cannot check for malicious software and refuse to run the app; click "Ok"
-- Open "System Settings"/"Privacy & Security" and find `icloudpd-1.23.4-macos-amd64` as blocked app; Click "Allow"
-- Start `icloudpd-1.23.4-macos-amd64` from the terminal again
+- Open "System Settings"/"Privacy & Security" and find `icloudpd-1.26.1-macos-amd64` as blocked app; Click "Allow"
+- Start `icloudpd-1.26.1-macos-amd64` from the terminal again
 - Apple will show another warning; click "Open"
-- After that you can run `icloudpd-1.23.4-macos-amd64 --help` or any other supported command/option
+- After that you can run `icloudpd-1.26.1-macos-amd64 --help` or any other supported command/option
 
 ## Error on the First Run
 

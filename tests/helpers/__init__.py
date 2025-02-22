@@ -6,6 +6,7 @@ from typing import List, Protocol, Sequence, Tuple, TypeVar
 
 import vcr
 from click.testing import CliRunner, Result
+
 from icloudpd.base import main
 
 
@@ -95,7 +96,7 @@ def run_cassette(cassette_path: str, params: Sequence[str]) -> Result:
 
 def run_icloudpd_test(
     assert_equal: AssertEquality,
-    vcr_path: str,
+    root_path: str,
     base_dir: str,
     cassette_filename: str,
     files_to_create: Sequence[Tuple[str, str, int]],
@@ -104,9 +105,13 @@ def run_icloudpd_test(
 ) -> Tuple[str, Result]:
     cookie_dir = os.path.join(base_dir, "cookie")
     data_dir = os.path.join(base_dir, "data")
+    vcr_path = os.path.join(root_path, "vcr_cassettes")
+    cookie_master_path = os.path.join(root_path, "cookie")
 
-    for dir in [base_dir, cookie_dir, data_dir]:
+    for dir in [base_dir, data_dir]:
         recreate_path(dir)
+
+    shutil.copytree(cookie_master_path, cookie_dir)
 
     create_files(data_dir, files_to_create)
 
