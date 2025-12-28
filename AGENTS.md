@@ -121,6 +121,7 @@ Test these scenarios after re-applying changes:
 
 ## Commit History
 
+- `d9a27c0` (2025-12-28): Fix type check errors in http.py and test_random_offset_mode.py
 - `81d0fbd` (2025-12-28): Add random offset mode for picture frame use case
 - `2fbd3b9` (2025-12-28): Add comprehensive tests for random offset mode
 - `7ad07a5` (2024-09-20): Add handling for a single offset
