@@ -121,14 +121,8 @@ Test these scenarios after re-applying changes:
 
 ## Commit History
 
-- `136c7af` (2025-12-28): Update AGENTS.md with latest commit history
-- `d9a27c0` (2025-12-28): Fix type check errors in http.py and test_random_offset_mode.py
-- `81d0fbd` (2025-12-28): Add random offset mode for picture frame use case
-- `2fbd3b9` (2025-12-28): Add comprehensive tests for random offset mode
-- `7ad07a5` (2024-09-20): Add handling for a single offset
-- `2b998ce` (2024-09-20): Handle ValueError when offsets are exhausted
-- `52f000d` (2024-09-20): Handle case where filters return a single photo
-- `e4af2b1` (2024-07-07): Initial random offset implementation
+Review the commit history for user 'johncass' to see all of the changes
+that we have introduced.
 
 ## Dependencies
 
