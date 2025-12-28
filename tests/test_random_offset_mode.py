@@ -1,6 +1,7 @@
 """Tests for random offset mode in PhotoAlbum."""
 
 import random
+from typing import Any
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -38,7 +39,7 @@ class RandomOffsetModeTestCase(TestCase):
             random_offset_mode=random_offset_mode,
         )
 
-    def _mock_photo_response(self, count: int) -> dict:
+    def _mock_photo_response(self, count: int) -> dict[str, Any]:
         """Create mock photo response with specified number of photos."""
         records = []
         for i in range(count):

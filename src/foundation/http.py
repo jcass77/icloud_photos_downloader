@@ -6,6 +6,7 @@ from operator import eq, not_
 from typing import Any, Callable, Iterable, Mapping, Tuple
 
 from requests import PreparedRequest, Response
+from requests.cookies import RequestsCookieJar
 
 from foundation import flat_dict, non_empty_pairs
 from foundation.core import compose, fst, snd
@@ -18,7 +19,7 @@ def cookie_to_pair(cookie: Cookie) -> Tuple[str, str | None]:
     )
 
 
-jar_to_pairs: Callable[[Iterable[Cookie]], Iterable[Tuple[str, str]]] = compose(
+jar_to_pairs: Callable[[Iterable[Cookie] | RequestsCookieJar], Iterable[Tuple[str, str]]] = compose(
     non_empty_pairs, partial(map, cookie_to_pair)
 )
 
