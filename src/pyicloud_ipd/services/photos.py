@@ -1,6 +1,7 @@
 import base64
 import copy
 import json
+import random
 import re
 import typing
 from datetime import datetime
@@ -675,6 +676,7 @@ class PhotoAlbum:
         query_filter: Sequence[Dict[str, Any]] | None = None,
         page_size: int = 100,
         zone_id: Dict[str, Any] | None = None,
+        random_offset_mode: bool = False,
     ):
         self.name = name
         self.params = params
@@ -685,6 +687,8 @@ class PhotoAlbum:
         self.offset = 0
         self.query_filter = query_filter
         self.page_size = page_size
+        self.random_offset_mode = random_offset_mode
+        self._offsets: list[int] = []  # For picture frame random offset tracking
 
         if zone_id:
             self._zone_id: Dict[str, Any] = zone_id
@@ -727,6 +731,25 @@ class PhotoAlbum:
 
     @property
     def photos(self) -> Generator[PhotoIterationResult, Any, None]:
+        # Picture frame mode: Initialize random offsets on first iteration
+        if self.random_offset_mode and not self._offsets:
+            album_length_result = self.get_album_length()
+            match album_length_result:
+                case AlbumLengthSuccess(count):
+                    album_length = count
+                case _:
+                    # If we can't get album length, fall back to sequential
+                    album_length = 0
+
+            if album_length > 0:
+                self._offsets = [
+                    i for i in range(0, album_length - 1, min(self.page_size, album_length))
+                ]
+                try:
+                    self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
+                except (ValueError, IndexError):
+                    self.offset = 0
+
         while True:
             result = photos_request(
                 self.service_endpoint,
@@ -763,6 +786,17 @@ class PhotoAlbum:
                     yield PhotoIterationSuccess(
                         PhotoAsset(master_record, asset_records[record_name])
                     )
+
+                # Picture frame mode: Pick next random offset after yielding all photos at current offset
+                if self.random_offset_mode:
+                    try:
+                        self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
+                    except ValueError:
+                        self.offset = 0
+                    except IndexError:
+                        yield PhotoIterationComplete()
+                        return
+                else:
                     self.increment_offset(1)
             else:
                 yield PhotoIterationComplete()
