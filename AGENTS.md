@@ -15,9 +15,10 @@ This fork adds functionality to browse iCloud photos at random offsets, making i
 
 **Changes Summary**:
 1. Add `random` import
-2. Add `_offsets` tracking list to `__init__`
-3. Initialize random offsets on first iteration in `photos` property
-4. Replace sequential offset progression with random selection
+2. Add `random_offset_mode` parameter to `__init__`
+3. Add `_offsets` tracking list to `__init__`
+4. Initialize random offsets on first iteration in `photos` property (when `random_offset_mode=True`)
+5. Replace sequential offset progression with random selection (when `random_offset_mode=True`)
 
 **Detailed Modifications**:
 
@@ -27,19 +28,34 @@ This fork adds functionality to browse iCloud photos at random offsets, making i
 import random
 ```
 
-#### 2. Add Offsets Tracking to __init__
+#### 2. Add random_offset_mode Parameter and Offsets Tracking to __init__
 ```python
-# In PhotoAlbum.__init__ (around line 688):
-self._offsets: list[int] = []  # For picture frame random offset tracking
+# In PhotoAlbum.__init__ (around line 668):
+def __init__(
+    self,
+    params: Dict[str, Any],
+    session: PyiCloudSession,
+    service_endpoint: str,
+    name: str,
+    list_type: str,
+    obj_type: str,
+    query_filter: Sequence[Dict[str, Any]] | None = None,
+    page_size: int = 100,
+    zone_id: Dict[str, Any] | None = None,
+    random_offset_mode: bool = False,  # NEW: Enable picture frame mode
+):
+    # ... existing fields ...
+    self.random_offset_mode = random_offset_mode  # NEW
+    self._offsets: list[int] = []  # NEW: For picture frame random offset tracking
 ```
 
 #### 3. Initialize Random Offsets in photos Property
 ```python
-# At start of photos property (around line 732):
+# At start of photos property (around line 734):
 @property
 def photos(self) -> Generator[PhotoIterationResult, Any, None]:
     # Picture frame mode: Initialize random offsets on first iteration
-    if not self._offsets:
+    if self.random_offset_mode and not self._offsets:  # NEW: Guard with mode check
         album_length_result = self.get_album_length()
         match album_length_result:
             case AlbumLengthSuccess(count):
@@ -61,19 +77,7 @@ def photos(self) -> Generator[PhotoIterationResult, Any, None]:
 
 #### 4. Replace Offset Progression Logic
 ```python
-# BEFORE (upstream):
-if master_records_len:
-    for master_record in master_records:
-        record_name = master_record["recordName"]
-        yield PhotoIterationSuccess(
-            PhotoAsset(master_record, asset_records[record_name])
-        )
-        self.increment_offset(1)
-else:
-    yield PhotoIterationComplete()
-    return
-
-# AFTER (fork):
+# In photos property, after yielding photos (around line 785):
 if master_records_len:
     for master_record in master_records:
         record_name = master_record["recordName"]
@@ -82,13 +86,16 @@ if master_records_len:
         )
     
     # Picture frame mode: Pick next random offset after yielding all photos at current offset
-    try:
-        self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
-    except ValueError:
-        self.offset = 0
-    except IndexError:
-        yield PhotoIterationComplete()
-        return
+    if self.random_offset_mode:  # NEW: Guard with mode check
+        try:
+            self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
+        except ValueError:
+            self.offset = 0
+        except IndexError:
+            yield PhotoIterationComplete()
+            return
+    else:  # NEW: Preserve original sequential behavior
+        self.increment_offset(1)
 else:
     yield PhotoIterationComplete()
     return
@@ -114,11 +121,11 @@ Test these scenarios after re-applying changes:
 
 ## Commit History
 
+- `2fbd3b9` (2025-12-28): Add comprehensive tests for random offset mode
+- `7ad07a5` (2024-09-20): Add handling for a single offset
+- `2b998ce` (2024-09-20): Handle ValueError when offsets are exhausted
+- `52f000d` (2024-09-20): Handle case where filters return a single photo
 - `e4af2b1` (2024-07-07): Initial random offset implementation
-- `52f000d` (2024-09-20): Handle single photo case + DESCENDING warning
-- `2b998ce` (2024-09-20): Handle ValueError when offsets exhausted
-- `7ad07a5` (2024-09-20): Improved error handling for single offset
-- `c2df4a2` (2024-09-20): Merge upstream/master into picture_frame_tweaks
 
 ## Dependencies
 
