@@ -1,0 +1,125 @@
+# Fork-Specific Changes for AI Agents
+
+This document describes changes made to this fork for a **picture frame use case**. These modifications enable random photo browsing suitable for digital picture frames.
+
+## Branch: `picture_frame_tweaks`
+
+## Use Case
+This fork adds functionality to browse iCloud photos at random offsets, making it suitable for digital picture frame applications that need to display photos in a randomized manner rather than sequential order.
+
+## Modified Files
+
+### `src/pyicloud_ipd/services/photos.py`
+
+**Location**: `PhotoAlbum` class (around line 666-795)
+
+**Changes Summary**:
+1. Add `random` import
+2. Add `_offsets` tracking list to `__init__`
+3. Initialize random offsets on first iteration in `photos` property
+4. Replace sequential offset progression with random selection
+
+**Detailed Modifications**:
+
+#### 1. Add Random Import
+```python
+# At top of file (around line 4):
+import random
+```
+
+#### 2. Add Offsets Tracking to __init__
+```python
+# In PhotoAlbum.__init__ (around line 688):
+self._offsets: list[int] = []  # For picture frame random offset tracking
+```
+
+#### 3. Initialize Random Offsets in photos Property
+```python
+# At start of photos property (around line 732):
+@property
+def photos(self) -> Generator[PhotoIterationResult, Any, None]:
+    # Picture frame mode: Initialize random offsets on first iteration
+    if not self._offsets:
+        album_length_result = self.get_album_length()
+        match album_length_result:
+            case AlbumLengthSuccess(count):
+                album_length = count
+            case _:
+                # If we can't get album length, fall back to sequential
+                album_length = 0
+        
+        if album_length > 0:
+            self._offsets = [i for i in range(0, album_length - 1, min(self.page_size, album_length))]
+            try:
+                self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
+            except (ValueError, IndexError):
+                self.offset = 0
+    
+    while True:
+        # ... rest of method
+```
+
+#### 4. Replace Offset Progression Logic
+```python
+# BEFORE (upstream):
+if master_records_len:
+    for master_record in master_records:
+        record_name = master_record["recordName"]
+        yield PhotoIterationSuccess(
+            PhotoAsset(master_record, asset_records[record_name])
+        )
+        self.increment_offset(1)
+else:
+    yield PhotoIterationComplete()
+    return
+
+# AFTER (fork):
+if master_records_len:
+    for master_record in master_records:
+        record_name = master_record["recordName"]
+        yield PhotoIterationSuccess(
+            PhotoAsset(master_record, asset_records[record_name])
+        )
+    
+    # Picture frame mode: Pick next random offset after yielding all photos at current offset
+    try:
+        self.offset = self._offsets.pop(random.randint(0, len(self._offsets) - 1))
+    except ValueError:
+        self.offset = 0
+    except IndexError:
+        yield PhotoIterationComplete()
+        return
+else:
+    yield PhotoIterationComplete()
+    return
+```
+
+## Re-applying Changes After Upstream Merge
+
+When merging upstream changes, focus on the `PhotoAlbum.photos` property in `src/pyicloud_ipd/services/photos.py`:
+
+1. **Add import**: Ensure `import random` is at the top of the file
+2. **Add tracking field**: Add `self._offsets: list[int] = []` to `PhotoAlbum.__init__`
+3. **Initialize offsets**: At start of `photos` property, check if `_offsets` is empty and initialize with random offset list
+4. **Replace offset progression**: Remove `self.increment_offset(1)` calls and replace with random offset selection after yielding photos
+5. **Handle edge cases**: Catch `ValueError` and `IndexError` when popping from offsets list
+
+## Testing Considerations
+
+Test these scenarios after re-applying changes:
+- Album with single photo (should not crash)
+- Album with photos < page_size (should handle gracefully)
+- Empty offsets list (should start at 0 or complete iteration)
+- Album length retrieval failure (should fall back to sequential)
+
+## Commit History
+
+- `e4af2b1` (2024-07-07): Initial random offset implementation
+- `52f000d` (2024-09-20): Handle single photo case + DESCENDING warning
+- `2b998ce` (2024-09-20): Handle ValueError when offsets exhausted
+- `7ad07a5` (2024-09-20): Improved error handling for single offset
+- `c2df4a2` (2024-09-20): Merge upstream/master into picture_frame_tweaks
+
+## Dependencies
+
+No additional dependencies required beyond upstream project.
