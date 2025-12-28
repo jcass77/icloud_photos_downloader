@@ -24,9 +24,7 @@ class RandomOffsetModeTestCase(TestCase):
         self.mock_params = {"param": "value"}
         self.service_endpoint = "https://test.icloud.com"
 
-    def _create_album(
-        self, random_offset_mode: bool = True, page_size: int = 10
-    ) -> PhotoAlbum:
+    def _create_album(self, random_offset_mode: bool = True, page_size: int = 10) -> PhotoAlbum:
         """Create a PhotoAlbum instance for testing."""
         return PhotoAlbum(
             params=self.mock_params,
@@ -64,12 +62,8 @@ class RandomOffsetModeTestCase(TestCase):
         album = self._create_album(page_size=10)
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(100)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(100)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             mock_response = Mock()
             mock_response.json.return_value = self._mock_photo_response(10)
@@ -88,12 +82,8 @@ class RandomOffsetModeTestCase(TestCase):
         album = self._create_album(page_size=10)
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(30)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(30)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             mock_response = Mock()
             mock_response.json.return_value = self._mock_photo_response(10)
@@ -117,12 +107,8 @@ class RandomOffsetModeTestCase(TestCase):
         album = self._create_album(page_size=10)
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(1)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(1)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             # First call returns 1 photo, second call returns empty
             mock_response1 = Mock()
@@ -144,9 +130,7 @@ class RandomOffsetModeTestCase(TestCase):
                     break
 
             # Verify we got the photo
-            success_results = [
-                r for r in results if isinstance(r, PhotoIterationSuccess)
-            ]
+            success_results = [r for r in results if isinstance(r, PhotoIterationSuccess)]
             self.assertEqual(len(success_results), 1)
 
     def test_photos_less_than_page_size(self) -> None:
@@ -154,12 +138,8 @@ class RandomOffsetModeTestCase(TestCase):
         album = self._create_album(page_size=10)
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(5)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(5)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             # First call returns 5 photos, second returns empty
             mock_response1 = Mock()
@@ -181,9 +161,7 @@ class RandomOffsetModeTestCase(TestCase):
                     break
 
             # Verify photos were yielded
-            success_results = [
-                r for r in results if isinstance(r, PhotoIterationSuccess)
-            ]
+            success_results = [r for r in results if isinstance(r, PhotoIterationSuccess)]
             self.assertEqual(len(success_results), 5)
 
     def test_empty_offsets_list(self) -> None:
@@ -191,12 +169,8 @@ class RandomOffsetModeTestCase(TestCase):
         album = self._create_album(page_size=10)
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(10)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(10)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             # First call returns photos, second returns empty to trigger completion
             mock_response1 = Mock()
@@ -218,9 +192,7 @@ class RandomOffsetModeTestCase(TestCase):
                     break
 
             # Verify iteration completed
-            self.assertTrue(
-                any(isinstance(r, PhotoIterationComplete) for r in results)
-            )
+            self.assertTrue(any(isinstance(r, PhotoIterationComplete) for r in results))
 
     def test_album_length_failure(self) -> None:
         """Test fallback to sequential when get_album_length fails."""
@@ -232,9 +204,7 @@ class RandomOffsetModeTestCase(TestCase):
                 "get_album_length",
                 return_value=ResponseAPIError("error", "Failed"),
             ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             mock_response = Mock()
             mock_response.json.return_value = self._mock_photo_response(5)
@@ -256,12 +226,8 @@ class RandomOffsetModeTestCase(TestCase):
         album._offsets = []  # Manually set empty offsets
 
         with (
-            patch.object(
-                album, "get_album_length", return_value=AlbumLengthSuccess(10)
-            ),
-            patch(
-                "pyicloud_ipd.services.photos.photos_request"
-            ) as mock_photos_request,
+            patch.object(album, "get_album_length", return_value=AlbumLengthSuccess(10)),
+            patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request,
         ):
             mock_response = Mock()
             mock_response.json.return_value = self._mock_photo_response(10)
@@ -287,9 +253,7 @@ class RandomOffsetModeTestCase(TestCase):
         """Test that random_offset_mode=False preserves original behavior."""
         album = self._create_album(random_offset_mode=False, page_size=10)
 
-        with patch(
-            "pyicloud_ipd.services.photos.photos_request"
-        ) as mock_photos_request:
+        with patch("pyicloud_ipd.services.photos.photos_request") as mock_photos_request:
             # First call returns photos, second returns empty
             mock_response1 = Mock()
             mock_response1.json.return_value = self._mock_photo_response(10)
