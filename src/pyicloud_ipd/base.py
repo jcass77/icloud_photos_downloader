@@ -658,8 +658,15 @@ class PyiCloudService:
                 ):
                     return result
         if response.status_code == 409:
-            # requires 2FA
-            pass
+            # requires 2FA - explicitly request push notification to trusted devices.
+            # Apple no longer auto-pushes verification codes after iOS/macOS 26.4+.
+            # See: https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1340
+            # See: https://github.com/rclone/rclone/issues/9324
+            headers = self._get_auth_headers()
+            self.session.get(
+                f"{self.AUTH_ENDPOINT}/verify/trusteddevice",
+                headers=headers,
+            )
         elif response.status_code == 412:
             # non 2FA account returns 412 "precondition no met"
             headers = self._get_auth_headers()
